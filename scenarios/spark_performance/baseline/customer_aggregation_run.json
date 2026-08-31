@@ -1,0 +1,61 @@
+{
+  "run_id": "run-customer-aggregation-2026-08-21",
+  "job_id": "customer_aggregation",
+  "job_name": "customer_aggregation",
+  "timestamp": "2026-08-21T02:00:00Z",
+  "status": "SUCCEEDED",
+  "duration_seconds": 1500,
+  "input_size_bytes": 536870912000,
+  "output_size_bytes": 91268055040,
+  "partition_count": 200,
+  "partition_size_stats_bytes": {
+    "smallest": 2254857830,
+    "median": 2684354560,
+    "p95": 2952790016,
+    "largest": 3221225472
+  },
+  "shuffle_bytes": {
+    "read": 118111600640,
+    "write": 102005473280
+  },
+  "executor_metrics": {
+    "peak_executor_memory_bytes": 13958643712,
+    "memory_spill_bytes": 644245094,
+    "disk_spill_bytes": 0,
+    "gc_time_seconds": 84,
+    "failed_task_count": 0
+  },
+  "stage_metrics": [
+    {
+      "stage_id": 1,
+      "name": "Read customer events",
+      "duration_seconds": 420,
+      "task_count": 200,
+      "partition_size_stats_bytes": {
+        "median": 2684354560,
+        "largest": 3221225472
+      },
+      "shuffle_read_bytes": 0,
+      "shuffle_write_bytes": 102005473280
+    },
+    {
+      "stage_id": 2,
+      "name": "Aggregate customer metrics",
+      "duration_seconds": 1080,
+      "task_count": 200,
+      "partition_size_stats_bytes": {
+        "median": 2684354560,
+        "largest": 3221225472
+      },
+      "shuffle_read_bytes": 118111600640,
+      "shuffle_write_bytes": 0
+    }
+  ],
+  "spark_configuration": {
+    "spark.sql.adaptive.enabled": "true",
+    "spark.sql.adaptive.skewJoin.enabled": "true",
+    "spark.sql.shuffle.partitions": "200",
+    "spark.executor.memory": "16g",
+    "spark.executor.instances": "10"
+  }
+}

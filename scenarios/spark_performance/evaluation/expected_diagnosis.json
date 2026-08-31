@@ -1,0 +1,57 @@
+{
+  "scenario_id": "spark_performance_customer_aggregation_skew",
+  "expected_root_cause_category": "DATA_SKEW",
+  "expected_leading_hypothesis": "Data skew in the aggregation stage",
+  "supporting_evidence": [
+    {
+      "metric": "runtime_regression_ratio",
+      "expected_range": {
+        "min": 3.5,
+        "max": 4.5
+      },
+      "reason": "The incident run is substantially slower than the historical baseline."
+    },
+    {
+      "metric": "input_growth_ratio",
+      "expected_range": {
+        "min": 1.0,
+        "max": 1.15
+      },
+      "reason": "Input growth is too small to explain the runtime regression by itself."
+    },
+    {
+      "metric": "incident_skew_ratio",
+      "expected_range": {
+        "min": 10.0,
+        "max": 12.0
+      },
+      "reason": "The largest partition is much larger than the median partition."
+    },
+    {
+      "metric": "shuffle_write_growth_ratio",
+      "expected_range": {
+        "min": 3.5,
+        "max": 4.5
+      },
+      "reason": "Shuffle volume increased substantially during the degraded run."
+    }
+  ],
+  "alternative_hypotheses": [
+    {
+      "name": "Input volume increase",
+      "expected_status": "REJECTED",
+      "reason": "Input increased only modestly relative to runtime."
+    },
+    {
+      "name": "Configuration regression",
+      "expected_status": "REJECTED",
+      "reason": "The relevant Spark configuration is unchanged between runs."
+    },
+    {
+      "name": "Memory or resource pressure",
+      "expected_status": "INCONCLUSIVE",
+      "reason": "Spill and GC increased, but the fixture does not establish whether they are a cause or an effect of the partition imbalance."
+    }
+  ],
+  "expected_recommendation": "Inspect the aggregation key distribution and mitigate the uneven partition before changing cluster settings."
+}
