@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from typing import List
 
-from app.evidence_tools.spark import SparkEvidenceProviderError, SparkFixtureEvidenceProvider
+from app.evidence_tools.spark import SparkEvidenceProviderError, SparkEvidenceProvider
 from app.investigation.spark_performance import SparkPerformanceAnalyzer
 from app.models import (
     AuditEventType,
@@ -32,7 +32,7 @@ class SparkPerformanceInvestigationOrchestrator:
 
     def __init__(
         self,
-        provider: SparkFixtureEvidenceProvider,
+        provider: SparkEvidenceProvider,
         analyzer: SparkPerformanceAnalyzer | None = None,
     ) -> None:
         self.provider = provider

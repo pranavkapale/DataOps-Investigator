@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Protocol
 
 from pydantic import BaseModel, ValidationError
 
@@ -97,6 +97,22 @@ class SparkStagesTelemetry(BaseModel):
 class _FixtureRun:
     role: str
     telemetry: SparkRunTelemetry
+
+
+class SparkEvidenceProvider(Protocol):
+    """Protocol defining read-only Spark evidence capabilities."""
+
+    def get_job(self, run_id: str) -> SparkJobTelemetry: ...
+
+    def get_run(self, run_id: str) -> SparkRunTelemetry: ...
+
+    def get_stages(self, run_id: str) -> SparkStagesTelemetry: ...
+
+    def get_partition_statistics(self, run_id: str) -> SparkPartitionStatistics: ...
+
+    def get_configuration(self, run_id: str) -> Dict[str, str]: ...
+
+    def get_baseline(self, job_id: str, run_id: str) -> SparkRunTelemetry: ...
 
 
 class SparkFixtureEvidenceProvider:
