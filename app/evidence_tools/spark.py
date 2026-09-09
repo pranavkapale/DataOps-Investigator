@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Protocol
+from typing import Any, Dict, List, Protocol
 
 from pydantic import BaseModel, ValidationError
 
@@ -102,6 +102,10 @@ class _FixtureRun:
 class SparkEvidenceProvider(Protocol):
     """Protocol defining read-only Spark evidence capabilities."""
 
+    def __enter__(self) -> "SparkEvidenceProvider": ...
+
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None: ...
+
     def get_job(self, run_id: str) -> SparkJobTelemetry: ...
 
     def get_run(self, run_id: str) -> SparkRunTelemetry: ...
@@ -121,6 +125,12 @@ class SparkFixtureEvidenceProvider:
     def __init__(self, scenario_dir: Path | None = None) -> None:
         self.scenario_dir = scenario_dir or DEFAULT_SCENARIO_DIR
         self._runs = self._load_runs()
+
+    def __enter__(self) -> "SparkFixtureEvidenceProvider":
+        return self
+
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        pass
 
     def get_job(self, run_id: str) -> SparkJobTelemetry:
         run = self._get_run(run_id)

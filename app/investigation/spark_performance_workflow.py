@@ -41,133 +41,134 @@ class SparkPerformanceInvestigationOrchestrator:
     def investigate(self, incident_run_id: str) -> InvestigationReport:
         audit_records: List[AuditRecord] = []
         try:
-            job = self.provider.get_job(incident_run_id)
-            incident_time = _parse_timestamp(job.timestamp)
-            incident = Incident(
-                incident_id=f"incident-{incident_run_id}",
-                investigation_type=InvestigationType.SPARK_PERFORMANCE,
-                title=f"Spark performance regression for {job.job_name}",
-                description=(
-                    f"Investigate Spark run '{job.run_id}' with duration "
-                    f"{job.duration_seconds} seconds."
-                ),
-                created_at=incident_time,
-                source_reference=SourceReference(
-                    source="spark_fixture_telemetry",
-                    location=f"run_id={job.run_id}",
-                    captured_at=incident_time,
-                ),
-            )
-            plan = _completed_plan(incident.incident_id)
-            _append_audit(
-                audit_records,
-                incident,
-                incident_time,
-                AuditEventType.INVESTIGATION_STARTED,
-                "Scenario 1 Spark performance investigation started.",
-            )
-            _append_audit(
-                audit_records,
-                incident,
-                incident_time,
-                AuditEventType.PLAN_CREATED,
-                "Created bounded Spark investigation plan.",
-            )
-            _append_audit(
-                audit_records,
-                incident,
-                incident_time,
-                AuditEventType.JOB_RETRIEVED,
-                f"Retrieved job metadata for run '{job.run_id}'.",
-            )
-
-            self.provider.get_stages(incident_run_id)
-            _append_audit(
-                audit_records,
-                incident,
-                incident_time,
-                AuditEventType.STAGES_RETRIEVED,
-                f"Retrieved stage telemetry for run '{job.run_id}'.",
-            )
-            self.provider.get_partition_statistics(incident_run_id)
-            _append_audit(
-                audit_records,
-                incident,
-                incident_time,
-                AuditEventType.PARTITION_STATISTICS_RETRIEVED,
-                f"Retrieved partition statistics for run '{job.run_id}'.",
-            )
-            self.provider.get_configuration(incident_run_id)
-            _append_audit(
-                audit_records,
-                incident,
-                incident_time,
-                AuditEventType.CONFIGURATION_RETRIEVED,
-                f"Retrieved Spark configuration for run '{job.run_id}'.",
-            )
-            baseline = self.provider.get_baseline(job.job_id, incident_run_id)
-            _append_audit(
-                audit_records,
-                incident,
-                incident_time,
-                AuditEventType.BASELINE_RETRIEVED,
-                f"Retrieved baseline run '{baseline.run_id}'.",
-            )
-
-            findings = self.analyzer.analyze_runs(
-                baseline=baseline,
-                incident=self.provider.get_run(incident_run_id),
-            )
-            _append_audit(
-                audit_records,
-                incident,
-                incident_time,
-                AuditEventType.ANALYSIS_COMPLETED,
-                "Derived Spark performance metrics and evidence.",
-            )
-            _append_audit(
-                audit_records,
-                incident,
-                incident_time,
-                AuditEventType.HYPOTHESIS_EVALUATED,
-                "Evaluated deterministic Spark performance hypotheses.",
-            )
-            _append_audit(
-                audit_records,
-                incident,
-                incident_time,
-                AuditEventType.INVESTIGATION_COMPLETED,
-                f"Investigation finished with status '{findings.status.value}'.",
-            )
-
-            report = InvestigationReport(
-                incident=incident,
-                status=findings.status,
-                plan=plan,
-                hypotheses=findings.hypotheses,
-                evidence=findings.evidence,
-                leading_hypothesis_id=findings.leading_hypothesis_id,
-                confidence=findings.heuristic_confidence,
-                rejected_hypothesis_ids=_hypothesis_ids(
-                    findings.hypotheses, HypothesisStatus.REJECTED
-                ),
-                inconclusive_hypothesis_ids=_hypothesis_ids(
-                    findings.hypotheses, HypothesisStatus.INCONCLUSIVE
-                ),
-                recommendations=_recommendations(findings.leading_hypothesis_id, findings.evidence),
-                audit_records=audit_records,
-                sources=[
-                    SourceReference(
-                        source="spark_fixture_telemetry",
-                        location=str(self.provider.scenario_dir / "baseline"),
+            with self.provider:
+                job = self.provider.get_job(incident_run_id)
+                incident_time = _parse_timestamp(job.timestamp)
+                incident = Incident(
+                    incident_id=f"incident-{incident_run_id}",
+                    investigation_type=InvestigationType.SPARK_PERFORMANCE,
+                    title=f"Spark performance regression for {job.job_name}",
+                    description=(
+                        f"Investigate Spark run '{job.run_id}' with duration "
+                        f"{job.duration_seconds} seconds."
                     ),
-                    SourceReference(
+                    created_at=incident_time,
+                    source_reference=SourceReference(
                         source="spark_fixture_telemetry",
-                        location=str(self.provider.scenario_dir / "incident"),
+                        location=f"run_id={job.run_id}",
+                        captured_at=incident_time,
                     ),
-                ],
-            )
-            return report
+                )
+                plan = _completed_plan(incident.incident_id)
+                _append_audit(
+                    audit_records,
+                    incident,
+                    incident_time,
+                    AuditEventType.INVESTIGATION_STARTED,
+                    "Scenario 1 Spark performance investigation started.",
+                )
+                _append_audit(
+                    audit_records,
+                    incident,
+                    incident_time,
+                    AuditEventType.PLAN_CREATED,
+                    "Created bounded Spark investigation plan.",
+                )
+                _append_audit(
+                    audit_records,
+                    incident,
+                    incident_time,
+                    AuditEventType.JOB_RETRIEVED,
+                    f"Retrieved job metadata for run '{job.run_id}'.",
+                )
+
+                self.provider.get_stages(incident_run_id)
+                _append_audit(
+                    audit_records,
+                    incident,
+                    incident_time,
+                    AuditEventType.STAGES_RETRIEVED,
+                    f"Retrieved stage telemetry for run '{job.run_id}'.",
+                )
+                self.provider.get_partition_statistics(incident_run_id)
+                _append_audit(
+                    audit_records,
+                    incident,
+                    incident_time,
+                    AuditEventType.PARTITION_STATISTICS_RETRIEVED,
+                    f"Retrieved partition statistics for run '{job.run_id}'.",
+                )
+                self.provider.get_configuration(incident_run_id)
+                _append_audit(
+                    audit_records,
+                    incident,
+                    incident_time,
+                    AuditEventType.CONFIGURATION_RETRIEVED,
+                    f"Retrieved Spark configuration for run '{job.run_id}'.",
+                )
+                baseline = self.provider.get_baseline(job.job_id, incident_run_id)
+                _append_audit(
+                    audit_records,
+                    incident,
+                    incident_time,
+                    AuditEventType.BASELINE_RETRIEVED,
+                    f"Retrieved baseline run '{baseline.run_id}'.",
+                )
+
+                findings = self.analyzer.analyze_runs(
+                    baseline=baseline,
+                    incident=self.provider.get_run(incident_run_id),
+                )
+                _append_audit(
+                    audit_records,
+                    incident,
+                    incident_time,
+                    AuditEventType.ANALYSIS_COMPLETED,
+                    "Derived Spark performance metrics and evidence.",
+                )
+                _append_audit(
+                    audit_records,
+                    incident,
+                    incident_time,
+                    AuditEventType.HYPOTHESIS_EVALUATED,
+                    "Evaluated deterministic Spark performance hypotheses.",
+                )
+                _append_audit(
+                    audit_records,
+                    incident,
+                    incident_time,
+                    AuditEventType.INVESTIGATION_COMPLETED,
+                    f"Investigation finished with status '{findings.status.value}'.",
+                )
+
+                report = InvestigationReport(
+                    incident=incident,
+                    status=findings.status,
+                    plan=plan,
+                    hypotheses=findings.hypotheses,
+                    evidence=findings.evidence,
+                    leading_hypothesis_id=findings.leading_hypothesis_id,
+                    confidence=findings.heuristic_confidence,
+                    rejected_hypothesis_ids=_hypothesis_ids(
+                        findings.hypotheses, HypothesisStatus.REJECTED
+                    ),
+                    inconclusive_hypothesis_ids=_hypothesis_ids(
+                        findings.hypotheses, HypothesisStatus.INCONCLUSIVE
+                    ),
+                    recommendations=_recommendations(findings.leading_hypothesis_id, findings.evidence),
+                    audit_records=audit_records,
+                    sources=[
+                        SourceReference(
+                            source="spark_fixture_telemetry",
+                            location=str(self.provider.scenario_dir / "baseline"),
+                        ),
+                        SourceReference(
+                            source="spark_fixture_telemetry",
+                            location=str(self.provider.scenario_dir / "incident"),
+                        ),
+                    ],
+                )
+                return report
         except (SparkEvidenceProviderError, ValueError) as exc:
             raise SparkInvestigationError(
                 f"Unable to complete Spark investigation for run '{incident_run_id}': {exc}"
