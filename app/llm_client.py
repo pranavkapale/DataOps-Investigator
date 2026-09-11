@@ -73,6 +73,11 @@ class LLMClient:
         if not content or not isinstance(content, str):
             raise LLMClientError("LLM response content was empty or not a string.")
 
+        # Added to Debug issue in calling Agentic API
+        # print("\n--- DIAGNOSTIC: RAW LLM RESPONSE ---")
+        # print(repr(content[:1000] + ("..." if len(content) > 1000 else "")))
+        # print("------------------------------------\n")
+
         try:
             parsed_json = json.loads(content)
             return response_model.model_validate(parsed_json)

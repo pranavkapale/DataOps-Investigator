@@ -240,3 +240,15 @@ class InvestigationReport(BaseModel):
                         f"to appear in {field_name}."
                     )
         return self
+
+class AgenticEvaluationMetrics(BaseModel):
+    total_cases: int
+    valid_plan_count: int
+    invalid_plan_count: int
+    required_tool_coverage: float
+    unsafe_tool_count: int
+    duplicate_tool_count: int
+    successful_investigations: int
+    correct_root_cause_count: int
+    root_cause_accuracy: float
+    evidence_coverage: float

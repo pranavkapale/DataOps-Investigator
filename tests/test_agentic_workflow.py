@@ -7,7 +7,7 @@ import pytest
 from app.evidence_tools.spark import SparkFixtureEvidenceProvider
 from app.investigation.agentic_workflow import SparkAgenticInvestigationOrchestrator
 from app.investigation.planner import (
-    InvestigationPlanner,
+    InvestigationPlannerProtocol,
     InvestigationPlannerError,
     InvestigationPlanProposal,
     PlannedStep,
@@ -19,7 +19,7 @@ RUN_ID = "run-customer-aggregation-2026-08-28"
 
 @pytest.fixture
 def mock_planner():
-    return Mock(spec=InvestigationPlanner)
+    return Mock(spec=InvestigationPlannerProtocol)
 
 @pytest.fixture
 def provider():

@@ -1,4 +1,4 @@
-from typing import List, Literal
+from typing import List, Literal, Protocol
 
 from pydantic import BaseModel, Field
 
@@ -23,9 +23,16 @@ class InvestigationPlanProposal(BaseModel):
 class InvestigationPlannerError(RuntimeError):
     """Raised when the LLM generates an invalid investigation plan."""
 
+class InvestigationPlannerProtocol(Protocol):
+    """Interface for investigation planners."""
+
+    def plan_investigation(self, incident_description: str) -> InvestigationPlanProposal:
+        """Creates a structured investigation plan."""
+        ...
+
 class InvestigationPlanner:
     """Bounded LLM Investigation Planner for Scenario 1."""
-    
+
     def __init__(self, llm_client: LLMClient):
         self.llm_client = llm_client
 
@@ -46,9 +53,9 @@ class InvestigationPlanner:
             f"{', '.join(ALLOWED_SPARK_TOOLS)}\n\n"
             "Output the plan strictly as JSON matching the requested schema."
         )
-        
+
         user_prompt = f"Create an investigation plan for the following incident:\n\n{incident_description}"
-        
+
         try:
             proposal = self.llm_client.generate_structured(
                 system_prompt=system_prompt,
@@ -64,7 +71,7 @@ class InvestigationPlanner:
     def _validate_proposal(self, proposal: InvestigationPlanProposal) -> None:
         if len(proposal.steps) > 5:
             raise InvestigationPlannerError("Plan exceeds the maximum limit of 5 steps.")
-            
+
         seen_tools = set()
         for step in proposal.steps:
             if step.tool not in ALLOWED_SPARK_TOOLS:
@@ -72,3 +79,10 @@ class InvestigationPlanner:
             if step.tool in seen_tools:
                 raise InvestigationPlannerError(f"Plan includes duplicate tool: '{step.tool}'")
             seen_tools.add(step.tool)
+
+        if proposal.investigation_type == "SPARK_PERFORMANCE":
+            missing_tools = ALLOWED_SPARK_TOOLS - seen_tools
+            if missing_tools:
+                raise InvestigationPlannerError(
+                    f"Plan is missing required tools: {', '.join(sorted(missing_tools))}"
+                )

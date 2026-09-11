@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from typing import List
 
 from app.evidence_tools.spark import SparkEvidenceProvider, SparkEvidenceProviderError
-from app.investigation.planner import InvestigationPlanner, InvestigationPlanProposal, InvestigationPlannerError
+from app.investigation.planner import InvestigationPlannerProtocol, InvestigationPlanProposal, InvestigationPlannerError
 from app.investigation.spark_performance import SparkPerformanceAnalyzer
 from app.investigation.spark_performance_workflow import (
     SparkInvestigationError,
@@ -34,28 +34,31 @@ class SparkAgenticInvestigationOrchestrator:
     def __init__(
         self,
         provider: SparkEvidenceProvider,
-        planner: InvestigationPlanner,
+        planner: InvestigationPlannerProtocol,
         analyzer: SparkPerformanceAnalyzer | None = None,
     ) -> None:
         self.provider = provider
         self.planner = planner
         self.analyzer = analyzer or SparkPerformanceAnalyzer()
 
-    def investigate(self, incident_run_id: str) -> InvestigationReport:
+    def investigate(self, incident_run_id: str, incident_description_override: str | None = None) -> InvestigationReport:
         audit_records: List[AuditRecord] = []
         try:
             with self.provider:
                 # 1. Fetch initial job metadata to form the incident
                 job = self.provider.get_job(incident_run_id)
                 incident_time = _parse_timestamp(job.timestamp)
+
+                desc = incident_description_override or (
+                    f"Investigate Spark run '{job.run_id}' with duration "
+                    f"{job.duration_seconds} seconds."
+                )
+
                 incident = Incident(
                     incident_id=f"incident-{incident_run_id}",
                     investigation_type=InvestigationType.SPARK_PERFORMANCE,
                     title=f"Spark performance regression for {job.job_name}",
-                    description=(
-                        f"Investigate Spark run '{job.run_id}' with duration "
-                        f"{job.duration_seconds} seconds."
-                    ),
+                    description=desc,
                     created_at=incident_time,
                     source_reference=SourceReference(
                         source="spark_fixture_telemetry",
@@ -63,7 +66,7 @@ class SparkAgenticInvestigationOrchestrator:
                         captured_at=incident_time,
                     ),
                 )
-                
+
                 _append_audit(
                     audit_records,
                     incident,
@@ -71,7 +74,7 @@ class SparkAgenticInvestigationOrchestrator:
                     AuditEventType.INVESTIGATION_STARTED,
                     "Scenario 1 agentic Spark performance investigation started.",
                 )
-                
+
                 # 2. Invoke the LLM Planner
                 try:
                     proposal = self.planner.plan_investigation(incident.description)
@@ -134,8 +137,6 @@ class SparkAgenticInvestigationOrchestrator:
                         raise ValueError(f"Unknown or unauthorized tool '{step.tool}' requested by planner.")
 
                 # 4. Fetch the full runs for the deterministic analyzer.
-                # Implicitly fetching baseline if the LLM forgot, to satisfy the analyzer's signature.
-                # (The LLM should plan it, but the deterministic analyzer requires it structurally)
                 incident_telemetry = self.provider.get_run(incident_run_id)
                 baseline_telemetry = self.provider.get_baseline(job.job_id, incident_run_id)
 
@@ -144,7 +145,7 @@ class SparkAgenticInvestigationOrchestrator:
                     baseline=baseline_telemetry,
                     incident=incident_telemetry,
                 )
-                
+
                 _append_audit(
                     audit_records,
                     incident,
@@ -195,7 +196,7 @@ class SparkAgenticInvestigationOrchestrator:
                     ],
                 )
                 return report
-                
+
         except (SparkEvidenceProviderError, ValueError) as exc:
             raise SparkInvestigationError(
                 f"Unable to complete agentic Spark investigation for run '{incident_run_id}': {exc}"
