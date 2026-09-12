@@ -10,8 +10,13 @@ from .rag_pipeline import answer_question
 
 from .evidence_tools.spark import SparkFixtureEvidenceProvider, UnknownSparkRunError, SparkEvidenceProviderError
 from .investigation.spark_performance_workflow import SparkPerformanceInvestigationOrchestrator, SparkInvestigationError
+from .evidence_tools.spark_mcp import SparkMCPEvidenceProvider
+from .investigation.agentic_workflow import SparkAgenticInvestigationOrchestrator
+from .investigation.planner import InvestigationPlanner, InvestigationPlannerError
+from .llm_client import LLMClient, LLMClientError
+from .models import InvestigationStatus
 
-def cmd_investigate(investigation_type: str, run_id: str, json_output: bool):
+def cmd_investigate(investigation_type: str, run_id: str, json_output: bool, agentic: bool):
     if investigation_type != "spark_performance":
         print(f"Error: Unknown investigation type '{investigation_type}'. Only 'spark_performance' is currently supported.", file=sys.stderr)
         sys.exit(1)
@@ -19,16 +24,37 @@ def cmd_investigate(investigation_type: str, run_id: str, json_output: bool):
     scenario_dir = Path(__file__).resolve().parent.parent / "scenarios" / "spark_performance"
 
     try:
-        provider = SparkFixtureEvidenceProvider(scenario_dir)
-        orchestrator = SparkPerformanceInvestigationOrchestrator(provider)
-        report = orchestrator.investigate(run_id)
+        if agentic:
+            llm_client = LLMClient()
+            planner = InvestigationPlanner(llm_client)
+            with SparkMCPEvidenceProvider() as provider:
+                orchestrator = SparkAgenticInvestigationOrchestrator(provider, planner)
+                report = orchestrator.investigate(run_id)
+        else:
+            provider = SparkFixtureEvidenceProvider(scenario_dir)
+            orchestrator = SparkPerformanceInvestigationOrchestrator(provider)
+            report = orchestrator.investigate(run_id)
 
         if json_output:
             print(report.model_dump_json(indent=2))
         else:
+            mode_str = "Agentic (via LLM & MCP)" if agentic else "Deterministic"
+            print(f"Investigation Mode: {mode_str}")
+            print(f"Investigation Type: {investigation_type}")
             print(f"Incident: {report.incident.title}")
             print(f"Run ID: {run_id}")
             print(f"Status: {report.status.value}")
+
+            if agentic and report.plan and report.plan.steps:
+                print("\nPLANNED TOOLS:")
+                for step in report.plan.steps:
+                    print(f"- {step.description}")
+            
+            print("\nACTUAL EVIDENCE:")
+            for ev in report.evidence:
+                if ev.derived_metric_name and ev.derived_metric_value is not None:
+                    val = f"{ev.derived_metric_value:.2f}" if isinstance(ev.derived_metric_value, float) else str(ev.derived_metric_value)
+                    print(f"- {ev.derived_metric_name}: {val}")
 
             if report.leading_hypothesis_id:
                 leading = next((h for h in report.hypotheses if h.hypothesis_id == report.leading_hypothesis_id), None)
@@ -36,12 +62,6 @@ def cmd_investigate(investigation_type: str, run_id: str, json_output: bool):
                     conf = f" (Confidence: {leading.heuristic_confidence:.2f})" if leading.heuristic_confidence else ""
                     print(f"\nLeading Root Cause: {leading.name}{conf}")
                     print(f"Rationale: {leading.rationale}")
-
-            print("\nKey Evidence (Derived Metrics):")
-            for ev in report.evidence:
-                if ev.derived_metric_name and ev.derived_metric_value is not None:
-                    val = f"{ev.derived_metric_value:.2f}" if isinstance(ev.derived_metric_value, float) else str(ev.derived_metric_value)
-                    print(f"- {ev.derived_metric_name}: {val}")
 
             print("\nHypotheses Summary:")
             for h in report.hypotheses:
@@ -54,8 +74,16 @@ def cmd_investigate(investigation_type: str, run_id: str, json_output: bool):
 
             print(f"\nAudit Events: {len(report.audit_records)} recorded")
 
+        if report.status == InvestigationStatus.FAILED:
+            if report.audit_records:
+                print(f"\nInvestigation Failed: {report.audit_records[-1].details}")
+            sys.exit(1)
+
     except (UnknownSparkRunError, SparkEvidenceProviderError, SparkInvestigationError) as exc:
         print(f"Investigation Error: {exc}", file=sys.stderr)
+        sys.exit(1)
+    except (LLMClientError, InvestigationPlannerError) as exc:
+        print(f"Agentic Planning Error: {exc}", file=sys.stderr)
         sys.exit(1)
 
 def cmd_build_index():
@@ -91,6 +119,7 @@ def main():
     investigate_p.add_argument("investigation_type", type=str)
     investigate_p.add_argument("run_id", type=str)
     investigate_p.add_argument("--json", action="store_true")
+    investigate_p.add_argument("--agentic", action="store_true", help="Use agentic workflow with LLM and MCP")
 
     args = parser.parse_args()
     if args.command == "build-index":
@@ -100,7 +129,7 @@ def main():
     elif args.command == "serve":
         cmd_serve(args.host, args.port)
     elif args.command == "investigate":
-        cmd_investigate(args.investigation_type, args.run_id, args.json)
+        cmd_investigate(args.investigation_type, args.run_id, args.json, args.agentic)
     else:
         parser.print_help()
 

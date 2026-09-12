@@ -1,0 +1,8 @@
+{
+  "run_id": "run-customer-daily-2026-09-12",
+  "pipeline_name": "customer_daily",
+  "status": "FAILED",
+  "timestamp": "2026-09-12T02:14:00Z",
+  "failed_task": "transform_customer_data",
+  "error_message": "Type mismatch in field 'customer_id'"
+}

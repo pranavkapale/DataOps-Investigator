@@ -1,0 +1,18 @@
+{
+  "dataset_id": "production_dataset",
+  "table_id": "customer_data",
+  "fields": [
+    {
+      "name": "customer_id",
+      "type": "STRING"
+    },
+    {
+      "name": "email",
+      "type": "STRING"
+    },
+    {
+      "name": "created_at",
+      "type": "TIMESTAMP"
+    }
+  ]
+}

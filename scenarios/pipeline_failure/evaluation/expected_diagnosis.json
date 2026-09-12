@@ -1,0 +1,7 @@
+{
+  "expected_root_cause": "SCHEMA_DRIFT",
+  "expected_supporting_evidence": [
+    "Schema mismatch in field 'customer_id'",
+    "Type changed from BIGINT to STRING"
+  ]
+}

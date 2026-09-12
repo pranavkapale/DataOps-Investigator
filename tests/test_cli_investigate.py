@@ -6,10 +6,33 @@ from pathlib import Path
 # Paths
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
+import io
+from unittest.mock import patch
+from app.cli import main
+
+class MockResult:
+    def __init__(self, returncode, stdout, stderr):
+        self.returncode = returncode
+        self.stdout = stdout
+        self.stderr = stderr
+
 def run_cli(*args):
-    """Helper to run the CLI and return the CompletedProcess."""
-    cmd = [sys.executable, "-m", "app.cli"] + list(args)
-    return subprocess.run(cmd, cwd=str(REPO_ROOT), capture_output=True, text=True)
+    """Helper to run the CLI in-process and return a MockResult."""
+    stdout = io.StringIO()
+    stderr = io.StringIO()
+    returncode = 0
+    with patch("sys.argv", ["cli.py"] + list(args)):
+        import contextlib
+        with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+            try:
+                main()
+            except SystemExit as e:
+                returncode = e.code if e.code is not None else 0
+            except Exception as e:
+                import traceback
+                traceback.print_exc(file=stderr)
+                returncode = 1
+    return MockResult(returncode, stdout.getvalue(), stderr.getvalue())
 
 def test_cli_human_readable_success():
     res = run_cli("investigate", "spark_performance", "run-customer-aggregation-2026-08-28")
@@ -18,7 +41,7 @@ def test_cli_human_readable_success():
     assert "Run ID: run-customer-aggregation-2026-08-28" in res.stdout
     assert "Status: COMPLETED" in res.stdout
     assert "Leading Root Cause: Data skew" in res.stdout
-    assert "Key Evidence (Derived Metrics):" in res.stdout
+    assert "ACTUAL EVIDENCE:" in res.stdout
     assert "skew_ratio" in res.stdout
     assert "runtime_regression_ratio" in res.stdout
     assert "Recommendations:" in res.stdout
@@ -60,3 +83,48 @@ def test_existing_cli_intact():
     assert "serve" in res.stdout
     assert "build-index" in res.stdout
     assert "investigate" in res.stdout
+
+def test_cli_agentic_human_readable_success(monkeypatch):
+    from app.investigation.deterministic_planner import DeterministicMockPlanner
+    # Mock the planner instantiation in app.cli
+    monkeypatch.setattr("app.cli.InvestigationPlanner", lambda *args, **kwargs: DeterministicMockPlanner())
+    
+    res = run_cli("investigate", "spark_performance", "run-customer-aggregation-2026-08-28", "--agentic")
+    assert res.returncode == 0, f"STDOUT:\n{res.stdout}\nSTDERR:\n{res.stderr}"
+    assert "Investigation Mode: Agentic (via LLM & MCP)" in res.stdout
+    assert "PLANNED TOOLS:" in res.stdout
+    assert "- spark_get_job:" in res.stdout
+    assert "ACTUAL EVIDENCE:" in res.stdout
+    assert "Status: COMPLETED" in res.stdout
+    assert "Leading Root Cause: Data skew" in res.stdout
+
+def test_cli_agentic_json_success(monkeypatch):
+    from app.investigation.deterministic_planner import DeterministicMockPlanner
+    monkeypatch.setattr("app.cli.InvestigationPlanner", lambda *args, **kwargs: DeterministicMockPlanner())
+    
+    res = run_cli("investigate", "spark_performance", "run-customer-aggregation-2026-08-28", "--agentic", "--json")
+    assert res.returncode == 0
+    try:
+        report = json.loads(res.stdout)
+    except json.JSONDecodeError as e:
+        raise AssertionError(f"Output is not valid JSON: {e}\nOutput: {res.stdout}")
+    
+    assert report["incident"]["investigation_type"] == "SPARK_PERFORMANCE"
+    assert report["leading_hypothesis_id"] == "DATA_SKEW"
+    # Ensure plan is populated
+    assert len(report["plan"]["steps"]) == 5
+
+def test_cli_agentic_planner_failure(monkeypatch):
+    from app.investigation.planner import InvestigationPlannerError
+    
+    class FailingPlanner:
+        def plan_investigation(self, *args, **kwargs):
+            raise InvestigationPlannerError("Mock LLM failure")
+            
+    monkeypatch.setattr("app.cli.InvestigationPlanner", lambda *args, **kwargs: FailingPlanner())
+    
+    res = run_cli("investigate", "spark_performance", "run-customer-aggregation-2026-08-28", "--agentic")
+    assert res.returncode != 0
+    assert "Status: FAILED" in res.stdout
+    assert "Mock LLM failure" in res.stdout
+

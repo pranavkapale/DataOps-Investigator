@@ -1,0 +1,6 @@
+[2026-09-12 02:14:05] INFO: Starting task transform_customer_data
+[2026-09-12 02:14:10] ERROR: Task failed during execution
+Traceback (most recent call last):
+  File "pipeline.py", line 42, in execute
+    raise SchemaMismatchError("Type mismatch in field 'customer_id': expected BIGINT, received STRING")
+SchemaMismatchError: Type mismatch in field 'customer_id': expected BIGINT, received STRING
