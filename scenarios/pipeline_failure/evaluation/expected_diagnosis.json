@@ -1,7 +1,8 @@
 {
-  "expected_root_cause": "SCHEMA_DRIFT",
-  "expected_supporting_evidence": [
-    "Schema mismatch in field 'customer_id'",
-    "Type changed from BIGINT to STRING"
-  ]
+  "scenario_id": "pipeline_failure_schema_drift",
+  "root_cause": "SCHEMA_DRIFT",
+  "changed_field": "customer_id",
+  "old_type": "BIGINT",
+  "new_type": "STRING",
+  "required_evidence": ["ev-schema-diff", "ev-log-mismatch"]
 }
