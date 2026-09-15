@@ -77,7 +77,10 @@ class SparkAgenticInvestigationOrchestrator:
 
                 # 2. Invoke the LLM Planner
                 try:
-                    proposal = self.planner.plan_investigation(incident.description)
+                    proposal = self.planner.plan_investigation(
+                        incident.description,
+                        InvestigationType.SPARK_PERFORMANCE
+                    )
                     plan = self._convert_plan(proposal, incident.incident_id)
                     _append_audit(
                         audit_records,

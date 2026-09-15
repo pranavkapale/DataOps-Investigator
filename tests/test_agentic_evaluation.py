@@ -8,6 +8,7 @@ from app.agentic_evaluation import AgenticScenarioEvaluator
 from app.evaluation_corpus import SCENARIO_1_CORPUS
 from app.evidence_tools.spark import SparkFixtureEvidenceProvider
 from app.investigation.agentic_workflow import SparkAgenticInvestigationOrchestrator
+from app.models import InvestigationType, SourceReference, InvestigationStatus
 from app.investigation.planner import (
     InvestigationPlanner,
     InvestigationPlannerError,
@@ -61,7 +62,7 @@ def test_agentic_evaluator_valid_plans(orchestrator, mock_planner):
 
 def test_agentic_evaluator_invalid_plans(orchestrator, mock_planner):
     # Setup mock to simulate various failures
-    def side_effect(description):
+    def side_effect(description, investigation_type):
         if "longer" in description:
             raise InvestigationPlannerError("Plan includes unauthorized tool: 'spark_mutate_job'")
         elif "slower" in description:
@@ -71,7 +72,7 @@ def test_agentic_evaluator_invalid_plans(orchestrator, mock_planner):
         else:
             # Fallback valid
             return InvestigationPlanProposal(
-                investigation_type="SPARK_PERFORMANCE",
+                investigation_type=InvestigationType.SPARK_PERFORMANCE,
                 steps=[
                     PlannedStep(tool="spark_get_job", reason="Check metadata"),
                     PlannedStep(tool="spark_get_stages", reason="Check stages"),
