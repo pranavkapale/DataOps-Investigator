@@ -2,13 +2,12 @@ import json
 import subprocess
 import sys
 from pathlib import Path
-
-# Paths
-REPO_ROOT = Path(__file__).resolve().parent.parent
-
 import io
 from unittest.mock import patch
 from app.cli import main
+
+# Paths
+REPO_ROOT = Path(__file__).resolve().parent.parent
 
 class MockResult:
     def __init__(self, returncode, stdout, stderr):
@@ -50,13 +49,13 @@ def test_cli_human_readable_success():
 def test_cli_json_success():
     res = run_cli("investigate", "spark_performance", "run-customer-aggregation-2026-08-28", "--json")
     assert res.returncode == 0
-    
+
     # Parse output as JSON
     try:
         report = json.loads(res.stdout)
     except json.JSONDecodeError as e:
         raise AssertionError(f"Output is not valid JSON: {e}\nOutput: {res.stdout}")
-    
+
     # Check that it represents an InvestigationReport
     assert "incident" in report
     assert "plan" in report
@@ -88,7 +87,7 @@ def test_cli_agentic_human_readable_success(monkeypatch):
     from app.investigation.deterministic_planner import DeterministicMockPlanner
     # Mock the planner instantiation in app.cli
     monkeypatch.setattr("app.cli.InvestigationPlanner", lambda *args, **kwargs: DeterministicMockPlanner())
-    
+
     res = run_cli("investigate", "spark_performance", "run-customer-aggregation-2026-08-28", "--agentic")
     assert res.returncode == 0, f"STDOUT:\n{res.stdout}\nSTDERR:\n{res.stderr}"
     assert "Investigation Mode: Agentic (via LLM & MCP)" in res.stdout
@@ -101,14 +100,14 @@ def test_cli_agentic_human_readable_success(monkeypatch):
 def test_cli_agentic_json_success(monkeypatch):
     from app.investigation.deterministic_planner import DeterministicMockPlanner
     monkeypatch.setattr("app.cli.InvestigationPlanner", lambda *args, **kwargs: DeterministicMockPlanner())
-    
+
     res = run_cli("investigate", "spark_performance", "run-customer-aggregation-2026-08-28", "--agentic", "--json")
     assert res.returncode == 0
     try:
         report = json.loads(res.stdout)
     except json.JSONDecodeError as e:
         raise AssertionError(f"Output is not valid JSON: {e}\nOutput: {res.stdout}")
-    
+
     assert report["incident"]["investigation_type"] == "SPARK_PERFORMANCE"
     assert report["leading_hypothesis_id"] == "DATA_SKEW"
     # Ensure plan is populated
@@ -116,15 +115,55 @@ def test_cli_agentic_json_success(monkeypatch):
 
 def test_cli_agentic_planner_failure(monkeypatch):
     from app.investigation.planner import InvestigationPlannerError
-    
+
     class FailingPlanner:
         def plan_investigation(self, *args, **kwargs):
             raise InvestigationPlannerError("Mock LLM failure")
-            
+
     monkeypatch.setattr("app.cli.InvestigationPlanner", lambda *args, **kwargs: FailingPlanner())
-    
+
     res = run_cli("investigate", "spark_performance", "run-customer-aggregation-2026-08-28", "--agentic")
     assert res.returncode != 0
     assert "Status: FAILED" in res.stdout
     assert "Mock LLM failure" in res.stdout
 
+def test_cli_pipeline_deterministic_success():
+    res = run_cli("investigate", "pipeline_failure", "run-customer-daily-2026-09-12")
+    assert res.returncode == 0, f"STDOUT:\n{res.stdout}\nSTDERR:\n{res.stderr}"
+    assert "Investigation Type: pipeline_failure" in res.stdout
+    assert "Status: COMPLETED" in res.stdout
+    assert "Leading Root Cause: Schema Drift" in res.stdout
+    assert "ACTUAL EVIDENCE:" in res.stdout
+    assert "Schema drifted fields: customer_id (BIGINT->STRING)" in res.stdout
+
+def test_cli_pipeline_json_success():
+    res = run_cli("investigate", "pipeline_failure", "run-customer-daily-2026-09-12", "--json")
+    assert res.returncode == 0
+
+    try:
+        report = json.loads(res.stdout)
+    except json.JSONDecodeError as e:
+        raise AssertionError(f"Output is not valid JSON: {e}\nOutput: {res.stdout}")
+
+    assert report["incident"]["investigation_type"] == "PIPELINE_FAILURE"
+    assert report["leading_hypothesis_id"] == "SCHEMA_DRIFT"
+
+def test_cli_pipeline_agentic_success(monkeypatch):
+    from app.investigation.deterministic_planner import DeterministicMockPlanner
+    monkeypatch.setattr("app.cli.InvestigationPlanner", lambda *args, **kwargs: DeterministicMockPlanner())
+
+    res = run_cli("investigate", "pipeline_failure", "run-customer-daily-2026-09-12", "--agentic")
+    assert res.returncode == 0, f"STDOUT:\n{res.stdout}\nSTDERR:\n{res.stderr}"
+    assert "Investigation Mode: Agentic (via LLM & MCP)" in res.stdout
+    assert "PLANNED TOOLS:" in res.stdout
+    assert "- pipeline_get_run:" in res.stdout
+    assert "ACTUAL EVIDENCE:" in res.stdout
+    assert "Status: COMPLETED" in res.stdout
+    assert "Leading Root Cause: Schema Drift" in res.stdout
+    assert "Schema drifted fields: customer_id (BIGINT->STRING)" in res.stdout
+
+def test_cli_pipeline_unknown_run_id():
+    res = run_cli("investigate", "pipeline_failure", "nonexistent-run-id")
+    assert res.returncode != 0
+    assert "Investigation Error:" in res.stderr
+    assert "Unknown run ID" in res.stderr

@@ -12,28 +12,44 @@ from .evidence_tools.spark import SparkFixtureEvidenceProvider, UnknownSparkRunE
 from .investigation.spark_performance_workflow import SparkPerformanceInvestigationOrchestrator, SparkInvestigationError
 from .evidence_tools.spark_mcp import SparkMCPEvidenceProvider
 from .investigation.agentic_workflow import SparkAgenticInvestigationOrchestrator
+from .evidence_tools.pipeline import PipelineFixtureEvidenceProvider, UnknownPipelineRunError, PipelineEvidenceProviderError
+from .investigation.pipeline_failure_workflow import PipelineFailureInvestigationOrchestrator, PipelineInvestigationError
+from .evidence_tools.pipeline_mcp import PipelineMCPEvidenceProvider
+from .investigation.pipeline_agentic_workflow import PipelineAgenticInvestigationOrchestrator
 from .investigation.planner import InvestigationPlanner, InvestigationPlannerError
 from .llm_client import LLMClient, LLMClientError
 from .models import InvestigationStatus
 
 def cmd_investigate(investigation_type: str, run_id: str, json_output: bool, agentic: bool):
-    if investigation_type != "spark_performance":
-        print(f"Error: Unknown investigation type '{investigation_type}'. Only 'spark_performance' is currently supported.", file=sys.stderr)
+    if investigation_type not in ["spark_performance", "pipeline_failure"]:
+        print(f"Error: Unknown investigation type '{investigation_type}'. Only 'spark_performance' and 'pipeline_failure' are currently supported.", file=sys.stderr)
         sys.exit(1)
 
-    scenario_dir = Path(__file__).resolve().parent.parent / "scenarios" / "spark_performance"
+    scenario_dir = Path(__file__).resolve().parent.parent / "scenarios" / investigation_type
 
     try:
-        if agentic:
-            llm_client = LLMClient()
-            planner = InvestigationPlanner(llm_client)
-            with SparkMCPEvidenceProvider() as provider:
-                orchestrator = SparkAgenticInvestigationOrchestrator(provider, planner)
+        if investigation_type == "pipeline_failure":
+            if agentic:
+                llm_client = LLMClient()
+                planner = InvestigationPlanner(llm_client)
+                with PipelineMCPEvidenceProvider() as provider:
+                    orchestrator = PipelineAgenticInvestigationOrchestrator(provider, planner)
+                    report = orchestrator.investigate(run_id)
+            else:
+                provider = PipelineFixtureEvidenceProvider(scenario_dir)
+                orchestrator = PipelineFailureInvestigationOrchestrator(provider)
                 report = orchestrator.investigate(run_id)
-        else:
-            provider = SparkFixtureEvidenceProvider(scenario_dir)
-            orchestrator = SparkPerformanceInvestigationOrchestrator(provider)
-            report = orchestrator.investigate(run_id)
+        else: # spark_performance
+            if agentic:
+                llm_client = LLMClient()
+                planner = InvestigationPlanner(llm_client)
+                with SparkMCPEvidenceProvider() as provider:
+                    orchestrator = SparkAgenticInvestigationOrchestrator(provider, planner)
+                    report = orchestrator.investigate(run_id)
+            else:
+                provider = SparkFixtureEvidenceProvider(scenario_dir)
+                orchestrator = SparkPerformanceInvestigationOrchestrator(provider)
+                report = orchestrator.investigate(run_id)
 
         if json_output:
             print(report.model_dump_json(indent=2))
@@ -52,7 +68,9 @@ def cmd_investigate(investigation_type: str, run_id: str, json_output: bool, age
             
             print("\nACTUAL EVIDENCE:")
             for ev in report.evidence:
-                if ev.derived_metric_name and ev.derived_metric_value is not None:
+                if investigation_type == "pipeline_failure" and ev.evidence_id == "ev-schema-diff":
+                    print(f"- {ev.observation}")
+                elif ev.derived_metric_name and ev.derived_metric_value is not None:
                     val = f"{ev.derived_metric_value:.2f}" if isinstance(ev.derived_metric_value, float) else str(ev.derived_metric_value)
                     print(f"- {ev.derived_metric_name}: {val}")
 
@@ -79,7 +97,8 @@ def cmd_investigate(investigation_type: str, run_id: str, json_output: bool, age
                 print(f"\nInvestigation Failed: {report.audit_records[-1].details}")
             sys.exit(1)
 
-    except (UnknownSparkRunError, SparkEvidenceProviderError, SparkInvestigationError) as exc:
+    except (UnknownSparkRunError, SparkEvidenceProviderError, SparkInvestigationError,
+            UnknownPipelineRunError, PipelineEvidenceProviderError, PipelineInvestigationError) as exc:
         print(f"Investigation Error: {exc}", file=sys.stderr)
         sys.exit(1)
     except (LLMClientError, InvestigationPlannerError) as exc:

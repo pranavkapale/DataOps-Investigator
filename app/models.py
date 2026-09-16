@@ -244,6 +244,10 @@ class AgenticEvaluationMetrics(BaseModel):
     total_cases: int
     valid_plan_count: int
     invalid_plan_count: int
+    planner_request_error_count: int = 0
+    plan_validation_error_count: int = 0
+    provider_error_count: int = 0
+    investigation_error_count: int = 0
     required_tool_coverage: float
     unsafe_tool_count: int
     duplicate_tool_count: int
