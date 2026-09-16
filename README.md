@@ -1,277 +1,342 @@
-# DataOps Investigator
+# DataOps Investigator 🕵️‍♂️ 📊
 
-> An evidence-driven AI agent for investigating, diagnosing, and optimizing data systems.
+> An evidence-driven AI agent for investigating and diagnosing data-system incidents.
 
-DataOps Investigator is a bounded, evidence-first AI troubleshooting agent for data engineers. Unlike generic chatbots or speculative autonomous agents, it operates on a strict principle:
+## 📌 Overview
 
-**The model plans. Tools collect facts. Deterministic analyzers diagnose.**
+**DataOps Investigator** turns data-engineering incidents into structured, evidence-backed investigations.
 
-## The Problem
+Instead of allowing an LLM to freely infer root causes, the system follows a strict principle:
 
-Data engineers frequently face sudden, opaque incidents in their data platforms:
-- *"Why did this Spark job suddenly become 4× slower?"*
-- *"Why did this pipeline fail overnight?"*
+> **The model plans. Tools collect facts. Deterministic analyzers diagnose.**
 
-Investigating these incidents typically requires manually correlating job metadata, stage metrics, shuffle sizes, configuration drifts, execution logs, and schema histories against a healthy baseline.
+The planner decides which approved evidence to collect, MCP-backed tools retrieve typed telemetry, and scenario-specific deterministic analyzers evaluate the evidence before producing a diagnosis.
 
-**DataOps Investigator** automates this workflow by treating data engineering incidents as a structured investigation, systematically gathering evidence before rendering a diagnosis.
+The current MVP supports Spark performance regressions and pipeline failures caused by schema drift.
+
+### Key Features
+
+* **Agentic Planning** — A scenario-aware LLM creates bounded evidence-collection plans.
+* **Deterministic Diagnosis** — Root-cause hypotheses are evaluated using scenario-specific rules rather than free-form LLM reasoning.
+* **MCP Evidence Layer** — Local MCP tools expose typed runtime evidence while keeping transport separate from diagnosis logic.
+* **Dual Execution Modes** — Run investigations deterministically without an LLM or through the agentic planner.
+* **Strict Guardrails** — Scenario-specific tool allowlists, required tools, bounded plans, duplicate/unknown-tool rejection, and read-only execution.
+* **Evaluation-Driven** — Deterministic and agentic evaluation harnesses verify diagnosis quality, evidence coverage, and planner safety.
 
 ---
 
-## What the System Does
+## 🔍 Supported Investigations
 
-A DataOps investigation follows a strict lifecycle to prevent LLM hallucination and ensure auditability:
+| Scenario                         | Evidence Collected                                                                  | Demonstrated Diagnosis |
+| -------------------------------- | ----------------------------------------------------------------------------------- | ---------------------- |
+| **Spark Performance Regression** | Runtime, input growth, partition skew, shuffle growth, spill, configuration changes | `DATA_SKEW`            |
+| **Pipeline Failure**             | Run metadata, failure logs, current schema, historical schema                       | `SCHEMA_DRIFT`         |
+
+For Pipeline Failure, `SCHEMA_DRIFT` is supported only when the detected schema change correlates with the actual failure evidence.
+
+Example:
 
 ```text
-Incident Reported
-    ↓
-Investigation Plan (LLM)
-    ↓
-Evidence Collection (MCP Tools)
-    ↓
-Deterministic Analysis
-    ↓
-Hypothesis Evaluation
-    ↓
-Evidence-Backed Diagnosis
-    ↓
-Recommendations
-    ↓
-Audit Trail
+Baseline Schema : customer_id = BIGINT
+Current Schema  : customer_id = STRING
+Failure Log     : Expected BIGINT, received STRING
+
+Diagnosis       : SCHEMA_DRIFT
 ```
 
-Every final diagnosis is traceable directly to empirical evidence retrieved from the underlying data systems.
+The system does not attribute the change to an upstream producer, deployment, or service unless evidence supporting that attribution is available.
 
 ---
 
-## Architecture
+## 🏗 Architecture
 
-The project cleanly separates agentic orchestration from diagnostic inference. 
+The architecture deliberately separates **agentic evidence acquisition** from **deterministic diagnosis**.
 
 ```mermaid
-flowchart TD
-    User([User / CLI]) --> Orchestrator
-    
-    subgraph Agentic Orchestration
-    Orchestrator[Agentic Orchestrator]
-    Planner[Scenario-Aware Planner\n(LLM)]
-    
-    Orchestrator <--> Planner
-    end
-    
-    subgraph Evidence Acquisition
-    MCP[MCP Server]
-    Provider[Typed Evidence Provider]
-    
-    Orchestrator -->|Calls Approved Tools| Provider
-    Provider <-->|MCP Transport| MCP
-    MCP -->|Fetches Runtime Facts| TargetSystem[(Target Systems)]
-    end
-    
-    subgraph Diagnostic Inference
-    Analyzer[Deterministic Analyzer]
-    Report[Investigation Report\n+ Hypotheses]
-    
-    Orchestrator -->|Passes Collected Evidence| Analyzer
-    Analyzer --> Report
-    end
-    
-    Report --> Eval[Evaluation Harness]
+flowchart LR
+    User["User / CLI"] --> Orchestrator["Investigation Orchestrator"]
+
+    Orchestrator <--> Planner["Scenario-Aware LLM Planner"]
+
+    Orchestrator --> Provider["Typed Evidence Provider"]
+    Provider --> MCP["Local MCP Server"]
+    MCP --> Fixtures[("Telemetry Fixtures")]
+
+    Provider --> Analyzer["Deterministic Analyzer"]
+    Analyzer --> Report["Investigation Report"]
+
+    Report --> Evaluation["Evaluation Harness"]
 ```
-*(In deterministic mode, the LLM planner is bypassed entirely, and a fixed scenario evidence fixture is fed directly into the analyzer.)*
-
----
-
-## Core Design Principle
-
-**LLM ≠ Source of Truth.**
-
-The biggest risk in data engineering AI is a system that confidently hallucinates root causes without evidence. To solve this, responsibilities are strictly segregated:
-
-1. **Planner:** Decides *what* approved evidence should be collected based on the incident context.
-2. **Evidence Provider:** Connects to systems (via MCP) and returns typed, runtime facts.
-3. **Analyzer:** Contains the actual diagnostic logic. It applies deterministic, domain-specific rules to the evidence.
-4. **Evaluator:** Checks whether the final diagnosis and plan match the expected scenario contract in the testing suite.
-
----
-
-## Supported Scenarios
-
-| Scenario | Investigated Evidence | Demonstrated Root Cause |
-| :--- | :--- | :--- |
-| **Spark Performance Regression** | Runtime regression, input growth, partition skew ratios, shuffle growth, memory spills, configuration changes. | `DATA_SKEW` |
-| **Pipeline Failure / Schema Drift** | Failed run metadata, failure logs, current schema, historical baseline schema. | `SCHEMA_DRIFT`<br>(`customer_id: BIGINT → STRING`) |
-
-*Note on Pipeline Failure: The system explicitly refuses to diagnose "Upstream Schema Drift" because the evidence only proves the schema changed locally; it does not contain upstream provenance to definitively attribute the root cause further up the DAG.*
-
----
-
-## Execution Modes
-
-The Investigator supports two distinct execution paths, both of which share the exact same domain models, analyzers, and outputs.
-
-### Deterministic Mode
-```text
-Fixed Bounded Plan → Fixture Provider → Analyzer
-```
-Used for reproducibility, CI/CD testing, and baseline evaluation without incurring LLM latency or costs.
 
 ### Agentic Mode
+
 ```text
-LLM Planner → Scenario Allowlist → MCP Tools → Analyzer
+Incident
+   ↓
+LLM Planner
+   ↓
+Validated Tool Plan
+   ↓
+MCP Evidence Provider
+   ↓
+Typed Telemetry
+   ↓
+Deterministic Analyzer
+   ↓
+Evidence-Backed Diagnosis
 ```
-The LLM dynamically generates the evidence collection plan based on the incident. Agentic mode changes *how evidence is acquired*, not how it is diagnosed.
+
+### Deterministic Mode
+
+```text
+Incident
+   ↓
+Fixed Bounded Workflow
+   ↓
+Fixture Evidence Provider
+   ↓
+Typed Telemetry
+   ↓
+Deterministic Analyzer
+   ↓
+Evidence-Backed Diagnosis
+```
+
+Agentic mode changes **how evidence is collected**, not how that evidence is interpreted.
 
 ---
 
-## Safety and Guardrails
+## 🛠 Tech Stack
 
-The agent operates in a highly constrained environment:
-- **Scenario-Specific Allowlists:** The planner can only select tools explicitly permitted for the current investigation type.
-- **Required Tools:** Plans are rejected if they miss critical baseline telemetry tools.
-- **Bounded Planning:** Plans are hard-capped at 5 steps.
-- **Duplicate/Unknown Rejection:** Invalid plans are rejected immediately and execute *zero* evidence calls against the infrastructure.
-- **Read-Only Model:** The agent has zero autonomous remediation capabilities. It investigates and recommends; it cannot execute write operations.
-- **Blind Runtime:** The runtime orchestrator cannot read the testing contracts (`expected_diagnosis.json`).
+* **Language:** Python 3
+* **Data Validation:** Pydantic
+* **Agentic Orchestration:** Custom typed workflow with explicit planning and validation
+* **LLM Integration:** OpenAI-compatible API
+* **Evidence Transport:** Model Context Protocol (`mcp`)
+* **CLI:** Python command-line interface
+* **Testing:** Pytest
+* **Evaluation:** Deterministic scenario contracts + offline agentic evaluation
 
----
-
-## MCP Architecture
-
-**MCP is the integration boundary, not the product.**
-
-DataOps Investigator uses the Model Context Protocol (MCP) to decouple the agent from the underlying data systems. 
-- In production, evidence tools connect to an external MCP server running against the real infrastructure.
-- In tests, a `FixtureEvidenceProvider` injects mock telemetry.
-- Crucially, tests prove that both the fixture-backed and MCP-backed providers return equivalent typed telemetry contracts.
+The project intentionally avoids introducing LangChain/LangGraph because the current investigation workflows require explicit control over planning, tool validation, evidence acquisition, and diagnosis boundaries.
 
 ---
 
-## Evaluation Strategy
-
-Evaluation is split into two rigorously separated layers:
-
-1. **Deterministic Evaluation:** Validates the outcome. Did the analyzer reach the correct root cause? Did it gather the required evidence? Did it correctly transition the hypotheses states?
-2. **Agentic Evaluation:** Validates the LLM's planning capability. It tracks `plan_validation_errors` (e.g., hallucinations, unsafe tools), `planner_request_errors` (e.g., OpenAI API 503s), and `investigation_errors` to ensure LLM failures are not silently converted into incorrect diagnostic conclusions. It operates locally using a deterministic mock planner for offline CI testing.
-
----
-
-## Demo / Quick Start
+## 🚀 How to Run
 
 ### Prerequisites
-- Python 3.9+ installed.
-- To run Agentic Mode, an OpenAI-compatible API key is required.
 
-### 1. Setup Environment
+* Python 3
+* An OpenAI-compatible LLM endpoint is required only for Agentic Mode
+
+### 1. Setup
+
 ```bash
+git clone <repository-url>
+cd dataops-investigator
+
 python -m venv venv
 source venv/bin/activate
+
 pip install -r requirements.txt
+
 cp .env.example .env
-# Add your LLM_API_KEY and LLM_API_BASE to .env for Agentic mode
 ```
 
-### 2. Run Investigations
+Configure the LLM settings in `.env` if you want to use Agentic Mode:
 
-**Spark Performance (Deterministic):**
+```text
+LLM_API_KEY=...
+LLM_API_BASE=...
+LLM_MODEL=...
+```
+
+### 2. Spark Performance Investigation
+
+#### Deterministic
+
 ```bash
 python -m app.cli investigate spark_performance run-customer-aggregation-2026-08-28
 ```
 
-**Spark Performance (Agentic):**
-*(Requires `.env` configuration)*
+#### Agentic
+
 ```bash
 python -m app.cli investigate spark_performance run-customer-aggregation-2026-08-28 --agentic
 ```
 
-**Pipeline Failure (Deterministic):**
+### 3. Pipeline Failure Investigation
+
+#### Deterministic
+
 ```bash
 python -m app.cli investigate pipeline_failure run-customer-daily-2026-09-12
 ```
 
-**Pipeline Failure (Agentic):**
-*(Requires `.env` configuration)*
+#### Agentic
+
 ```bash
 python -m app.cli investigate pipeline_failure run-customer-daily-2026-09-12 --agentic
 ```
 
-**JSON Output (Available for any command):**
+### JSON Output
+
+Append `--json` to return the serialized `InvestigationReport`:
+
 ```bash
 python -m app.cli investigate pipeline_failure run-customer-daily-2026-09-12 --json
 ```
 
 ---
 
-## Example Investigation Output
+## 💡 Example Investigation Output
 
 ### Spark Performance Regression
+
 ```text
-Investigation Mode: Agentic (via LLM & MCP)
 Investigation Type: spark_performance
-Incident: Spark performance regression for customer_aggregation
 Run ID: run-customer-aggregation-2026-08-28
 Status: COMPLETED
 
 ACTUAL EVIDENCE:
-- skew_ratio: 10.50
-- runtime_regression_ratio: 4.00
-- input_growth_ratio: 1.06
-- ...
 
-Leading Root Cause: Data skew (Confidence: 0.95)
-Rationale: The largest partition is significantly larger than the median partition size...
+runtime_regression_ratio: 4.00
+input_growth_ratio: 1.08
+skew_ratio: ~11.03
+shuffle_write_growth_ratio: ~4.11
 
-Recommendations:
-- Check the upstream data source for missing or uneven distribution keys...
+Leading Root Cause: Data Skew
+Confidence: 0.90
 ```
 
+The runtime increased approximately 4× while input volume increased only modestly. The much larger partition skew and shuffle growth provide stronger evidence for `DATA_SKEW` than simple input-volume growth.
+
 ### Pipeline Failure
+
 ```text
-Investigation Mode: Deterministic
 Investigation Type: pipeline_failure
-Incident: Pipeline failure for customer_daily
 Run ID: run-customer-daily-2026-09-12
 Status: COMPLETED
 
 ACTUAL EVIDENCE:
-- Schema drifted fields: customer_id (BIGINT->STRING)
-- schema_drift: True
+
+Schema drifted fields:
+customer_id (BIGINT -> STRING)
 
 Leading Root Cause: Schema Drift
-Rationale: Failure log indicates a schema mismatch on field 'customer_id'...
+```
 
-Recommendations:
-- Validate the changed field type against the historical schema contract...
+The analyzer correlates the historical/current schema difference with the field and type mismatch reported in the actual failure log.
+
+---
+
+## 🛡 Guardrails
+
+Before any agentic evidence collection occurs:
+
+* Tools must belong to the scenario-specific allowlist.
+* All required tools must be included.
+* Duplicate tools are rejected.
+* Unknown tools are rejected.
+* Plans are bounded to a maximum number of steps.
+* Invalid plans execute zero evidence calls.
+* Runtime components cannot read `expected_diagnosis.json`.
+* Investigation tools are read-only.
+
+The MVP investigates and recommends. It does not modify data, jobs, schemas, configuration, or infrastructure.
+
+---
+
+## 🧪 Evaluation
+
+The project evaluates two separate concerns.
+
+### Deterministic Evaluation
+
+Checks whether the investigation produced the expected:
+
+* root cause
+* evidence
+* derived metrics or schema changes
+* hypothesis states
+
+### Agentic Evaluation
+
+Measures:
+
+* valid and invalid plans
+* required-tool coverage
+* unsafe or unknown tools
+* duplicate tools
+* planner request failures
+* plan validation failures
+* provider failures
+* investigation failures
+* root-cause correctness
+* evidence coverage
+
+External LLM transport failures are tracked separately from invalid planning decisions.
+
+---
+
+## 🧪 Testing
+
+The project includes deterministic tests across both investigation scenarios and equivalence checks between deterministic and agentic execution paths.
+
+Coverage includes:
+
+* domain models
+* scenario fixtures
+* evidence providers
+* deterministic analyzers
+* investigation workflows
+* MCP tools
+* MCP provider equivalence and lifecycle
+* planner validation and guardrails
+* agentic workflows
+* deterministic evaluation
+* agentic evaluation
+* CLI behavior
+
+**Current verified result: 141 tests passing.**
+
+Run the full suite:
+
+```bash
+python -m pytest -q
 ```
 
 ---
 
-## Repository Structure
+## ⚖️ Engineering Trade-Offs
 
-```text
-app/
-  evidence_tools/       # MCP tool definitions and typed telemetry providers
-  investigation/        # Deterministic analyzers, workflows, and LLM planners
-scenarios/              # Deterministic test fixtures and evaluation contracts
-tests/                  # Comprehensive automated test suite
-```
+### Why deterministic diagnosis?
 
-## Testing
+Operational diagnoses should be reproducible and traceable to measured evidence rather than depend on free-form LLM reasoning.
 
-The project is backed by a robust, deterministic test suite ensuring both pipeline modes behave symmetrically.
+### Why scenario-specific analyzers?
 
-**Current Test Count:** 141 tests (Passing)
-Categories tested:
-- Domain Models
-- Scenario Fixtures
-- MCP Lifecycle Parity
-- Deterministic Analysis Logic
-- Orchestrator Workflows
-- LLM Planner Validation & Guardrails
-- Agentic Evaluators (Offline Mocking)
-- CLI Outputs
+Spark performance regression and pipeline schema failures require fundamentally different telemetry and diagnostic logic.
 
-Run the full suite using:
-```bash
-python -m pytest
-```
+### Why fixture-first?
+
+Fixtures allow repeatable investigations, negative test cases, provider-equivalence testing, and evaluation without requiring live infrastructure.
+
+### Why MCP?
+
+MCP separates evidence transport from diagnostic semantics while preserving the same typed provider contracts.
+
+### Why no generic agent framework?
+
+The project deliberately waits for demonstrated reuse before introducing broad abstractions. Scenario-specific workflows remain easier to understand and validate at the current scale.
+
+---
+
+## ⚠️ Current Limitations
+
+* Evidence currently comes from deterministic local telemetry fixtures rather than live Spark, Databricks, Airflow, or cloud integrations.
+* Real LLM evaluation depends on external model availability and is excluded from the deterministic automated test suite.
+* Some agentic evaluation errors are currently classified using exception-message inspection.
+* Spark and Pipeline MCP providers contain duplicated local stdio session-lifecycle logic.
+* Investigation status does not yet fully separate technical execution failure from an analytically inconclusive result.
+
+These are intentionally deferred MVP trade-offs rather than hidden production assumptions.
