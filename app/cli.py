@@ -2,11 +2,6 @@ import argparse
 import sys
 from pathlib import Path
 
-import uvicorn
-
-from .ingestion import build_chunks
-from .vector_store import get_vector_store
-from .rag_pipeline import answer_question
 
 from .evidence_tools.spark import SparkFixtureEvidenceProvider, UnknownSparkRunError, SparkEvidenceProviderError
 from .investigation.spark_performance_workflow import SparkPerformanceInvestigationOrchestrator, SparkInvestigationError
@@ -21,8 +16,8 @@ from .llm_client import LLMClient, LLMClientError
 from .models import InvestigationStatus
 
 def cmd_investigate(investigation_type: str, run_id: str, json_output: bool, agentic: bool):
-    if investigation_type not in ["spark_performance", "pipeline_failure"]:
-        print(f"Error: Unknown investigation type '{investigation_type}'. Only 'spark_performance' and 'pipeline_failure' are currently supported.", file=sys.stderr)
+    if investigation_type not in ["spark_performance", "pipeline_failure", "data_quality", "sql_regression"]:
+        print(f"Error: Unknown investigation type '{investigation_type}'.", file=sys.stderr)
         sys.exit(1)
 
     scenario_dir = Path(__file__).resolve().parent.parent / "scenarios" / investigation_type
@@ -39,6 +34,18 @@ def cmd_investigate(investigation_type: str, run_id: str, json_output: bool, age
                 provider = PipelineFixtureEvidenceProvider(scenario_dir)
                 orchestrator = PipelineFailureInvestigationOrchestrator(provider)
                 report = orchestrator.investigate(run_id)
+        elif investigation_type == "data_quality":
+            from .evidence_tools.data_quality import DataQualityFixtureEvidenceProvider
+            from .investigation.data_quality_workflow import DataQualityInvestigationOrchestrator
+            provider = DataQualityFixtureEvidenceProvider(scenario_dir)
+            orchestrator = DataQualityInvestigationOrchestrator(provider)
+            report = orchestrator.investigate(run_id)
+        elif investigation_type == "sql_regression":
+            from .evidence_tools.sql_regression import SQLFixtureEvidenceProvider
+            from .investigation.sql_regression_workflow import SQLRegressionInvestigationOrchestrator
+            provider = SQLFixtureEvidenceProvider(scenario_dir)
+            orchestrator = SQLRegressionInvestigationOrchestrator(provider)
+            report = orchestrator.investigate(run_id)
         else: # spark_performance
             if agentic:
                 llm_client = LLMClient()
@@ -97,42 +104,16 @@ def cmd_investigate(investigation_type: str, run_id: str, json_output: bool, age
                 print(f"\nInvestigation Failed: {report.audit_records[-1].details}")
             sys.exit(1)
 
-    except (UnknownSparkRunError, SparkEvidenceProviderError, SparkInvestigationError,
-            UnknownPipelineRunError, PipelineEvidenceProviderError, PipelineInvestigationError) as exc:
+    except Exception as exc:
         print(f"Investigation Error: {exc}", file=sys.stderr)
         sys.exit(1)
     except (LLMClientError, InvestigationPlannerError) as exc:
         print(f"Agentic Planning Error: {exc}", file=sys.stderr)
         sys.exit(1)
 
-def cmd_build_index():
-    print("Building index...")
-    chunks = build_chunks()
-    store = get_vector_store()
-    store.build(chunks)
-    print(f"Indexed {len(chunks)} chunks.")
-
-def cmd_ask(question: str):
-    answer, metas = answer_question(question)
-    print("\nAnswer:\n")
-    print(answer)
-    print("\nSources:")
-    for m in metas:
-        print(f"- {m.source} (chunk {m.chunk_id})")
-
-def cmd_serve(host: str = "0.0.0.0", port: int = 8000):
-    uvicorn.run("app.api:app", host=host, port=port, reload=False)
-
 def main():
     parser = argparse.ArgumentParser(description="DevDocs RAG Assistant")
     sub = parser.add_subparsers(dest="command")
-
-    sub.add_parser("build-index")
-    ask_p = sub.add_parser("ask")
-    ask_p.add_argument("question", type=str)
-    serve_p = sub.add_parser("serve")
-    serve_p.add_argument("--host", type=str, default="0.0.0.0")
-    serve_p.add_argument("--port", type=int, default=8000)
 
     investigate_p = sub.add_parser("investigate")
     investigate_p.add_argument("investigation_type", type=str)
@@ -141,13 +122,7 @@ def main():
     investigate_p.add_argument("--agentic", action="store_true", help="Use agentic workflow with LLM and MCP")
 
     args = parser.parse_args()
-    if args.command == "build-index":
-        cmd_build_index()
-    elif args.command == "ask":
-        cmd_ask(args.question)
-    elif args.command == "serve":
-        cmd_serve(args.host, args.port)
-    elif args.command == "investigate":
+    if args.command == "investigate":
         cmd_investigate(args.investigation_type, args.run_id, args.json, args.agentic)
     else:
         parser.print_help()

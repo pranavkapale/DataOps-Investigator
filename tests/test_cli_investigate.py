@@ -75,13 +75,6 @@ def test_cli_unknown_investigation_type():
     assert res.returncode != 0
     assert "Error: Unknown investigation type 'unknown_type'" in res.stderr
 
-def test_existing_cli_intact():
-    res = run_cli("-h")
-    assert res.returncode == 0
-    assert "ask" in res.stdout
-    assert "serve" in res.stdout
-    assert "build-index" in res.stdout
-    assert "investigate" in res.stdout
 
 def test_cli_agentic_human_readable_success(monkeypatch):
     from app.investigation.deterministic_planner import DeterministicMockPlanner

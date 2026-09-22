@@ -1,0 +1,5 @@
+{
+  "investigation_type": "DATA_QUALITY",
+  "incident_title": "Data quality anomaly detected",
+  "expected_leading_hypothesis": "INCOMPLETE_UPSTREAM_DATA"
+}

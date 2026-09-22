@@ -1,0 +1,14 @@
+{
+  "query_id": "sql-run-2026-09-19",
+  "execution_time_ms": 15000,
+  "nodes": [
+    {
+      "node_id": 1,
+      "type": "JOIN",
+      "input_rows_left": 10000000,
+      "input_rows_right": 500,
+      "output_rows": 10000000,
+      "join_type": "INNER"
+    }
+  ]
+}

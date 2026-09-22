@@ -46,9 +46,8 @@ def test_mcp_provider_equivalence_baseline():
 
 def test_mcp_provider_reuse_connection():
     """Test that a single provider instance reuses the connection across multiple calls."""
-    with patch("app.evidence_tools.spark_mcp.stdio_client") as mock_stdio:
-        # Actually stdio_client is an async context manager.
-        # Patching it fully async-ly is complicated without breaking it,
+    with patch("app.mcp_tools.session.stdio_client") as mock_stdio:
+        # We need a context manager double, since stdio_client returns a context manager that returns (read, write)ching it fully async-ly is complicated without breaking it,
         # but we can just use the real server and patch the init to count calls,
         # or we just rely on standard mcp behavior.
         pass
@@ -57,11 +56,12 @@ def test_mcp_provider_reuse_connection():
     # We can just verify the number of running processes or call multiple methods
     # and ensure the session id or loop is identical.
     with SparkMCPEvidenceProvider() as mcp_provider:
-        loop_before = mcp_provider._loop
+        loop_before = mcp_provider.session._loop
+        assert loop_before is not None
         mcp_provider.get_job(RUN_ID)
         mcp_provider.get_stages(RUN_ID)
         mcp_provider.get_partition_statistics(RUN_ID)
-        loop_after = mcp_provider._loop
+        loop_after = mcp_provider.session._loop
 
         # Ensure the same event loop was used for all calls
         assert loop_before is loop_after

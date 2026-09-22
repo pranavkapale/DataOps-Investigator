@@ -1,9 +1,3 @@
-fastapi
-uvicorn
-sentence-transformers
-faiss-cpu
-PyPDF2
-requests
 pydantic
-httpx
 mcp
+requests

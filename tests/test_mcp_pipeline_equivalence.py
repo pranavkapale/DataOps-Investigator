@@ -44,12 +44,13 @@ def test_mcp_pipeline_equivalence_baseline_schema():
 def test_mcp_pipeline_provider_reuse_connection():
     """Test that a single provider instance reuses the connection across multiple calls."""
     with PipelineMCPEvidenceProvider() as mcp_provider:
-        loop_before = mcp_provider._loop
+        loop_before = mcp_provider.session._loop
+        assert loop_before is not None
         mcp_provider.get_run(RUN_ID)
         mcp_provider.get_logs(RUN_ID, TASK_ID)
         mcp_provider.get_current_schema(DATASET_ID, TABLE_ID)
         mcp_provider.get_baseline_schema(DATASET_ID, TABLE_ID)
-        loop_after = mcp_provider._loop
+        loop_after = mcp_provider.session._loop
 
         # Ensure the same event loop was used for all calls
         assert loop_before is loop_after

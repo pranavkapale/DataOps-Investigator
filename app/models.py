@@ -27,6 +27,8 @@ class AskResponse(BaseModel):
 class InvestigationType(str, Enum):
     SPARK_PERFORMANCE = "SPARK_PERFORMANCE"
     PIPELINE_FAILURE = "PIPELINE_FAILURE"
+    DATA_QUALITY = "DATA_QUALITY"
+    SQL_REGRESSION = "SQL_REGRESSION"
 
 
 class InvestigationStatus(str, Enum):

@@ -31,7 +31,7 @@ def test_pipeline_agentic_offline_e2e_mcp():
     assert "pipeline_get_current_schema" in tool_names
     assert "pipeline_get_baseline_schema" in tool_names
     
-    assert provider._loop is None
+    assert provider.session._loop is None
 
 def test_pipeline_agentic_invalid_tool_rejection():
     """Test that unauthorized tools fail the investigation before execution."""

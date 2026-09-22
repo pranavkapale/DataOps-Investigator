@@ -1,0 +1,5 @@
+{
+  "investigation_type": "SQL_REGRESSION",
+  "incident_title": "SQL query performance regression",
+  "expected_leading_hypothesis": "JOIN_CARDINALITY_EXPLOSION"
+}

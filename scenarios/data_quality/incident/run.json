@@ -1,0 +1,17 @@
+{
+  "run_id": "dq-run-2026-09-20",
+  "dataset": "finance",
+  "table": "daily_revenue",
+  "metrics": {
+    "row_count": 650000,
+    "revenue": 325000.0,
+    "expected_partition_count": 24,
+    "observed_partition_count": 15,
+    "missing_partitions": [
+      "hour=15", "hour=16", "hour=17", "hour=18",
+      "hour=19", "hour=20", "hour=21", "hour=22", "hour=23"
+    ],
+    "null_key_ratio": 0.001,
+    "duplicate_ratio": 0.0
+  }
+}

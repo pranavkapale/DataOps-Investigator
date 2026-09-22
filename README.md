@@ -12,7 +12,7 @@ Instead of allowing an LLM to freely infer root causes, the system follows a str
 
 The planner decides which approved evidence to collect, MCP-backed tools retrieve typed telemetry, and scenario-specific deterministic analyzers evaluate the evidence before producing a diagnosis.
 
-The current MVP supports Spark performance regressions and pipeline failures caused by schema drift.
+The current MVP supports Spark performance regressions, pipeline failures caused by schema drift, SQL query performance regressions, and data quality anomalies.
 
 ### Key Features
 
@@ -31,6 +31,8 @@ The current MVP supports Spark performance regressions and pipeline failures cau
 | -------------------------------- | ----------------------------------------------------------------------------------- | ---------------------- |
 | **Spark Performance Regression** | Runtime, input growth, partition skew, shuffle growth, spill, configuration changes | `DATA_SKEW`            |
 | **Pipeline Failure**             | Run metadata, failure logs, current schema, historical schema                       | `SCHEMA_DRIFT`         |
+| **Data Quality Anomaly**         | Partition statistics, dataset/table configurations, run volume                      | `INCOMPLETE_UPSTREAM_DATA` |
+| **SQL Query Regression**         | Query plan nodes, logical operators, input/output row counts                        | `JOIN_CARDINALITY_EXPLOSION` |
 
 For Pipeline Failure, `SCHEMA_DRIFT` is supported only when the detected schema change correlates with the actual failure evidence.
 
@@ -131,7 +133,7 @@ The project intentionally avoids introducing LangChain/LangGraph because the cur
 ### 1. Setup
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/pranavkapale/DataOps-Investigator.git
 cd dataops-investigator
 
 python -m venv venv
@@ -176,6 +178,22 @@ python -m app.cli investigate pipeline_failure run-customer-daily-2026-09-12
 
 ```bash
 python -m app.cli investigate pipeline_failure run-customer-daily-2026-09-12 --agentic
+```
+
+### 4. Data Quality Anomaly
+
+#### Deterministic
+
+```bash
+python -m app.cli investigate data_quality dq-run-2026-09-20
+```
+
+### 5. SQL Query Regression
+
+#### Deterministic
+
+```bash
+python -m app.cli investigate sql_regression sql-query-101
 ```
 
 ### JSON Output
@@ -226,6 +244,41 @@ Leading Root Cause: Schema Drift
 ```
 
 The analyzer correlates the historical/current schema difference with the field and type mismatch reported in the actual failure log.
+
+### Data Quality Anomaly
+
+```text
+Investigation Type: data_quality
+Run ID: dq-run-2026-09-20
+Status: COMPLETED
+
+ACTUAL EVIDENCE:
+
+missing_partition_count: 9
+revenue_ratio: 0.65
+
+Leading Root Cause: Incomplete Upstream Data
+Confidence: 0.95
+```
+
+The analyzer observes missing partitions and identifies that the 35% drop in revenue is likely due to the upstream ingestion failure rather than a genuine business event.
+
+### SQL Query Regression
+
+```text
+Investigation Type: sql_regression
+Run ID: sql-query-101
+Status: COMPLETED
+
+ACTUAL EVIDENCE:
+
+join_expansion_ratio: 4975.12
+
+Leading Root Cause: Join Cardinality Explosion
+Confidence: 0.98
+```
+
+The analyzer traces the regression directly to a `JOIN` node where the output row count unexpectedly exceeded the combined input row count by several orders of magnitude compared to the historical baseline.
 
 ---
 
@@ -297,7 +350,7 @@ Coverage includes:
 * agentic evaluation
 * CLI behavior
 
-**Current verified result: 141 tests passing.**
+**Current verified result: 147 tests passing.**
 
 Run the full suite:
 
